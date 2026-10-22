@@ -83,10 +83,14 @@
   .range { display: flex; align-items: center; gap: 12px; }
   .range input[type=range] { flex: 1; accent-color: var(--prog); height: 28px; }
   .range output { font-weight: 700; font-size: 20px; width: 58px; text-align: right; }
-  .photo { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .photo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
   .photo label { border: 1px dashed #94A3B8; border-radius: 10px; padding: 7px 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
-  .photo img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; }
-  .photo .x { border: 0; background: none; color: var(--danger); cursor: pointer; font-size: 13px; }
+  .photo label.full { opacity: .45; pointer-events: none; }
+  .photo .pv { display: flex; flex-wrap: wrap; gap: 8px; }
+  .photo .th { position: relative; width: 58px; height: 58px; }
+  .photo .th img { width: 58px; height: 58px; object-fit: cover; border-radius: 8px; display: block; }
+  .photo .th button { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff; background: var(--danger); color: #fff; font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+  .photo .th.busy { background: #E2E8F0; border-radius: 8px; display: grid; place-items: center; font-size: 11px; color: var(--muted); }
   .timeline { position: relative; margin-left: 8px; padding-left: 18px; border-left: 2px solid var(--line); }
   .ev { position: relative; padding-bottom: 14px; }
   .ev::before { content: ''; position: absolute; left: -25px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: var(--dc, #94A3B8); border: 2px solid var(--bg); }
@@ -94,6 +98,9 @@
   .ev .tm { font-size: 11.5px; color: var(--muted); }
   .ev .n { white-space: pre-wrap; word-break: break-word; font-size: 14px; background: var(--card); border-radius: 10px; padding: 8px 10px; margin-top: 4px; box-shadow: var(--shadow); }
   .ev img { max-width: 100%; max-height: 240px; border-radius: 10px; margin-top: 6px; display: block; }
+  .ev .gal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 6px; max-width: 360px; }
+  .ev .gal a { display: block; aspect-ratio: 1; }
+  .ev .gal img { width: 100%; height: 100%; max-height: none; object-fit: cover; margin: 0; border-radius: 8px; }
   details.manage summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
   details.manage summary::after { content: '▾'; color: var(--muted); }
   details.manage[open] summary::after { content: '▴'; }
@@ -516,7 +523,7 @@ async function pageTask(p) {
       <div class="h"><b>${esc(u.userName)}</b> · ${esc(u.typeTh)}${u.type === 'PROGRESS' || u.type === 'SUBMIT' ? ' ' + u.progress + '%' : ''}</div>
       <div class="tm">${esc(fmt(u.createdAt))} · ${esc(ago(u.createdAt))}</div>
       ${u.note && u.type !== 'CREATE' ? `<div class="n">${esc(u.note)}</div>` : ''}
-      ${u.imageUrl ? `<a href="${esc(u.imageUrl)}" target="_blank" rel="noopener"><img src="${esc(u.imageUrl)}" alt="รูปแนบ" loading="lazy"></a>` : ''}
+      ${photoGallery(u.imageUrls || (u.imageUrl ? [u.imageUrl] : []))}
     </div>`).join('') + `</div>`;
   return h;
 }
@@ -526,18 +533,33 @@ pageTask.after = function (p) {
   $$('input[data-photo]').forEach(inp => inp.onchange = () => pickPhoto(inp));
   if (p.act === 'revise' && $('#reviewBox')) { $('#reviewBox').scrollIntoView({ behavior: 'smooth' }); setTimeout(() => $('#reviewNote').focus(), 400); }
 };
+const MAX_IMAGES = 5;
 function photoPicker(k) {
-  return `<div class="photo" id="ph-${k}"><label>📷 แนบรูป<input type="file" accept="image/*" data-photo="${k}" hidden></label><span class="pv"></span></div>`;
+  return `<div class="photo" id="ph-${k}"><label>📷 แนบรูป <span class="cnt">(สูงสุด ${MAX_IMAGES} รูป)</span><input type="file" accept="image/*" multiple data-photo="${k}" hidden></label><span class="pv"></span></div>`;
+}
+function renderPhotos(k) {
+  const list = S.img[k] || [];
+  $(`#ph-${k} .pv`).innerHTML = list.map((src, i) =>
+    `<span class="th"><img src="${src}" alt="รูปที่ ${i + 1}"><button type="button" aria-label="ลบรูปที่ ${i + 1}" onclick="removePhoto('${k}',${i})">✕</button></span>`).join('');
+  $(`#ph-${k} .cnt`).textContent = list.length ? `(${list.length}/${MAX_IMAGES})` : `(สูงสุด ${MAX_IMAGES} รูป)`;
+  $(`#ph-${k} label`).classList.toggle('full', list.length >= MAX_IMAGES);
 }
 async function pickPhoto(inp) {
-  const k = inp.dataset.photo, file = inp.files[0];
-  if (!file) return;
-  try {
-    S.img[k] = await resizeImage(file, 1280, 0.8);
-    $(`#ph-${k} .pv`).innerHTML = `<img src="${S.img[k]}"> <button type="button" class="x" onclick="clearPhoto('${k}')">ลบรูป</button>`;
-  } catch (e) { toast('อ่านรูปไม่ได้', true); }
+  const k = inp.dataset.photo;
+  const list = S.img[k] = S.img[k] || [];
+  let files = Array.from(inp.files || []).filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|heic|webp)$/i.test(f.name));
+  inp.value = '';
+  if (!files.length) return;
+  const room = MAX_IMAGES - list.length;
+  if (files.length > room) { toast(`แนบได้อีก ${room} รูป (สูงสุด ${MAX_IMAGES} รูป)`, true); files = files.slice(0, room); }
+  $(`#ph-${k} .pv`).insertAdjacentHTML('beforeend', files.map(() => '<span class="th busy">กำลังโหลด</span>').join(''));
+  for (const f of files) {
+    try { list.push(await resizeImage(f, 1280, 0.78)); } catch (e) { toast('อ่านรูป ' + f.name + ' ไม่ได้', true); }
+  }
+  renderPhotos(k);
 }
-function clearPhoto(k) { delete S.img[k]; $(`#ph-${k} .pv`).innerHTML = ''; $(`#ph-${k} input`).value = ''; }
+function removePhoto(k, i) { (S.img[k] || []).splice(i, 1); renderPhotos(k); }
+function photosOf(k) { return (S.img[k] || []).slice(); }
 function resizeImage(file, max, q) {
   return new Promise((res, rej) => {
     const img = new Image(), url = URL.createObjectURL(file);
@@ -551,17 +573,23 @@ function resizeImage(file, max, q) {
   });
 }
 
+function photoGallery(urls) {
+  if (!urls.length) return '';
+  if (urls.length === 1) return `<a href="${esc(urls[0])}" target="_blank" rel="noopener"><img src="${esc(urls[0])}" alt="รูปแนบ" loading="lazy"></a>`;
+  return `<div class="gal">${urls.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="รูปแนบที่ ${i + 1}" loading="lazy"></a>`).join('')}</div>`;
+}
+
 const reload = () => render();
 async function doAck() { try { await act('ack', { id: S.task.taskId }, 'รับทราบงานแล้ว ระบบแจ้งผู้สั่งให้'); reload(); } catch (e) { } }
 async function doUpdate() {
   try {
-    await act('update', { id: S.task.taskId, progress: Number($('#prog').value), note: $('#workNote').value, image: S.img.work || '' }, 'บันทึกความคืบหน้าแล้ว');
+    await act('update', { id: S.task.taskId, progress: Number($('#prog').value), note: $('#workNote').value, images: photosOf('work') }, 'บันทึกความคืบหน้าแล้ว');
     reload();
   } catch (e) { }
 }
 async function doSubmit() {
   if (!confirm('ยืนยันส่งงานให้ผู้สั่งตรวจรับ?')) return;
-  try { await act('submit', { id: S.task.taskId, note: $('#workNote').value, image: S.img.work || '' }, 'ส่งงานแล้ว ระบบแจ้งผู้สั่งให้'); reload(); } catch (e) { }
+  try { await act('submit', { id: S.task.taskId, note: $('#workNote').value, images: photosOf('work') }, 'ส่งงานแล้ว ระบบแจ้งผู้สั่งให้'); reload(); } catch (e) { }
 }
 async function doApprove(direct) {
   if (direct && !confirm('ปิดงานนี้เลยหรือไม่? (ถือว่างานเสร็จสมบูรณ์)')) return;
@@ -588,8 +616,8 @@ async function doCancel() {
 }
 async function doComment() {
   const note = $('#cmtNote').value;
-  if (!note.trim() && !S.img.cmt) return toast('กรุณาพิมพ์ข้อความ', true);
-  try { await act('comment', { id: S.task.taskId, note, image: S.img.cmt || '' }, 'ส่งข้อความแล้ว'); reload(); } catch (e) { }
+  if (!note.trim() && !photosOf('cmt').length) return toast('กรุณาพิมพ์ข้อความ', true);
+  try { await act('comment', { id: S.task.taskId, note, images: photosOf('cmt') }, 'ส่งข้อความแล้ว'); reload(); } catch (e) { }
 }
 
 /* ---------- ข้อมูลของฉัน ---------- */
@@ -674,7 +702,7 @@ const MOCK = (() => {
   const TYPE_TH = { CREATE: 'สั่งงาน', ACK: 'รับทราบงาน', PROGRESS: 'อัปเดตความคืบหน้า', SUBMIT: 'ส่งงาน', APPROVE: 'ตรวจรับ/ปิดงาน', REVISE: 'ขอให้แก้ไข', CANCEL: 'ยกเลิกงาน', EDIT: 'แก้ไขรายละเอียด', COMMENT: 'ความเห็น' };
   const dto = t => Object.assign({}, t, { assignerName: nm(t.assignerId), assigneeName: nm(t.assigneeId), overdue: ACTIVE.includes(t.status) && new Date(t.dueDate) < new Date() });
   const find = id => { const t = tasks.find(x => x.taskId === id); if (!t) throw new Error('ไม่พบงาน'); return t; };
-  const log = (t, type, note, img) => updates.push({ taskId: t.taskId, userId: me.userId, type, progress: t.progress, note: note || '', imageUrl: img || '', createdAt: new Date().toISOString() });
+  const log = (t, type, note, imgs) => updates.push({ taskId: t.taskId, userId: me.userId, type, progress: t.progress, note: note || '', imageUrls: [].concat(imgs || []), createdAt: new Date().toISOString() });
   const touch = (t, ch) => Object.assign(t, ch, { updatedAt: new Date().toISOString() });
   const sort = l => l.sort((a, b) => (ACTIVE.includes(b.status) - ACTIVE.includes(a.status)) || (new Date(a.dueDate) - new Date(b.dueDate)));
   const stats = () => {
@@ -701,13 +729,13 @@ const MOCK = (() => {
       tasks.push(t); log(t, 'CREATE', p.detail); return dto(t);
     }),
     ack: p => { const t = find(p.id); touch(t, { status: 'ACK' }); log(t, 'ACK'); return dto(t); },
-    update: p => { const t = find(p.id); touch(t, { status: 'IN_PROGRESS', progress: p.progress, lastNote: p.note || t.lastNote }); log(t, 'PROGRESS', p.note, p.image); return dto(t); },
-    submit: p => { const t = find(p.id); touch(t, { status: 'SUBMITTED', progress: 100, lastNote: p.note || t.lastNote }); log(t, 'SUBMIT', p.note, p.image); return dto(t); },
+    update: p => { const t = find(p.id); touch(t, { status: 'IN_PROGRESS', progress: p.progress, lastNote: p.note || t.lastNote }); log(t, 'PROGRESS', p.note, p.images); return dto(t); },
+    submit: p => { const t = find(p.id); touch(t, { status: 'SUBMITTED', progress: 100, lastNote: p.note || t.lastNote }); log(t, 'SUBMIT', p.note, p.images); return dto(t); },
     approve: p => { const t = find(p.id); touch(t, { status: 'DONE', progress: 100, completedAt: new Date().toISOString() }); log(t, 'APPROVE', p.note); return dto(t); },
     revise: p => { const t = find(p.id); touch(t, { status: 'REVISE', lastNote: p.note, progress: Math.min(t.progress, 90), dueDate: p.dueDate || t.dueDate }); log(t, 'REVISE', p.note); return dto(t); },
     cancel: p => { const t = find(p.id); touch(t, { status: 'CANCELLED' }); log(t, 'CANCEL', p.note); return dto(t); },
     edit: p => { const t = find(p.id); touch(t, { title: p.title, detail: p.detail, priority: p.priority, dueDate: p.dueDate || t.dueDate }); log(t, 'EDIT', 'แก้ไขรายละเอียดงาน'); return dto(t); },
-    comment: p => { const t = find(p.id); log(t, 'COMMENT', p.note, p.image); return dto(t); },
+    comment: p => { const t = find(p.id); log(t, 'COMMENT', p.note, p.images); return dto(t); },
   };
   return { call: (a, p) => new Promise((res, rej) => setTimeout(() => { try { res(JSON.parse(JSON.stringify(h[a](p)))); } catch (e) { rej(e); } }, 250)) };
 })();
