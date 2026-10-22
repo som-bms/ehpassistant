@@ -259,7 +259,7 @@ window.addEventListener('popstate', ev => {
 });
 
 async function render() {
-  $('#title').textContent = TITLES[S.page];
+  $('#title').textContent = S.page === 'assigned' && S.params.all === '1' ? 'งานทั้งองค์กร' : TITLES[S.page];
   $('#backBtn').style.display = (S.page === 'task' || S.page === 'profile') ? 'block' : 'none';
   $$('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.go === S.page));
   const view = $('#view');
@@ -301,6 +301,9 @@ async function pageHome() {
       ${tile(s.assigned.active, 'ยังไม่ปิดทั้งหมด', '', "go('assigned',{f:'active'})")}
     </div>`;
   }
+  if (u.isAdmin) {
+    h += `<button class="btn sec" style="margin-top:12px" onclick="go('assigned',{all:'1',f:'active'})">🏢 ดูงานทั้งองค์กร (ผู้ดูแล)</button>`;
+  }
   h += `<div class="section-title">ใกล้ครบกำหนด</div>`;
   h += upcoming.length ? upcoming.map(t => taskCard(t, 'mine')).join('') : `<div class="card empty" style="padding:22px">🎉 ไม่มีงานค้าง</div>`;
   h += `<button class="card hello" style="width:100%;border:0;text-align:left;cursor:pointer;margin-top:18px" onclick="openGuide()"><span style="font-size:26px">📖</span><div style="flex:1"><b style="font-size:15.5px">คู่มือการใช้งาน</b><span style="font-size:12.5px;color:var(--muted)">วิธีรับงาน สั่งงาน และสั่งงานในไลน์กลุ่ม</span></div><span style="color:var(--muted)">›</span></button>`;
@@ -309,7 +312,7 @@ async function pageHome() {
 function tile(n, label, cls, onclick) { return `<button class="tile ${cls}" onclick="${onclick}"><div class="n">${n}</div><div class="l">${esc(label)}</div></button>`; }
 
 function taskCard(t, scope) {
-  const who = scope === 'mine' ? 'จาก ' + t.assignerName : 'ถึง ' + t.assigneeName;
+  const who = scope === 'mine' ? 'จาก ' + t.assignerName : scope === 'all' ? t.assignerName + ' → ' + t.assigneeName : 'ถึง ' + t.assigneeName;
   return `<button class="card task" style="--pc:${PRIORITY_COLOR[t.priority]}" onclick="go('task',{id:'${esc(t.taskId)}'})">
     <div class="row1"><span>${esc(t.taskId)} · ${esc(who)}</span>${statusBadge(t.status)}</div>
     <div class="t">${t.priority === 'URGENT' ? '🔴 ' : t.priority === 'HIGH' ? '🟠 ' : ''}${esc(t.title)}</div>
@@ -365,7 +368,7 @@ async function listPage(scope, p) {
     h += `<div class="card" style="padding:10px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>ความคืบหน้าเฉลี่ย ${rows.length} งาน</span><b>${avg}%</b></div>${pbar(avg, '#06C755')}</div>`;
   }
   h += `<div style="display:grid;grid-template-columns:${row.length > 1 ? '1fr 1fr' : '1fr'};gap:8px;margin-bottom:12px">${row.join('')}</div>`;
-  h += rows.length ? rows.map(t => taskCard(t, scope === 'mine' ? 'mine' : 'assigned')).join('')
+  h += rows.length ? rows.map(t => taskCard(t, scope)).join('')
     : `<div class="empty"><div class="big">${f === 'active' ? '🎉' : '🗂️'}</div>${f === 'active' ? 'ไม่มีงานค้าง' : 'ไม่มีงานในหมวดนี้'}</div>`;
   return h;
 }
