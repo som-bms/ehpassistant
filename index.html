@@ -104,6 +104,7 @@
   details.manage summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
   details.manage summary::after { content: '▾'; color: var(--muted); }
   details.manage[open] summary::after { content: '▴'; }
+  a.lnk { color: var(--accent); text-decoration: underline; word-break: break-all; }
   .note-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .banner { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 12px; }
   .banner.warn { background: #FEF2F2; color: #991B1B; } .banner.info { background: #EFF6FF; color: #1E40AF; } .banner.mock { background: #FEF9C3; color: #854D0E; }
@@ -161,6 +162,14 @@ const $ = (sel, root) => (root || document).querySelector(sel);
 const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
 
 /* ---------- ตัวช่วยแสดงผล ---------- */
+/** แปลงข้อความเป็น HTML โดยให้ลิงก์ http(s) กดได้ */
+function linkify(s) {
+  return esc(s).replace(/https?:\/\/[^\s<>"'\u0E00-\u0E7F]+/gi, m => {
+    const trail = (m.match(/(?:[.,;:!?)\]}]|&#39;|&quot;|&gt;)+$/) || [''])[0];
+    const url = m.slice(0, m.length - trail.length);
+    return `<a class="lnk" href="${url}" target="_blank" rel="noopener">${url}</a>${trail}`;
+  });
+}
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmt(iso, noTime) {
   if (!iso) return '-';
@@ -459,7 +468,7 @@ async function pageTask(p) {
   let h = `<div class="card">
     <div class="row1" style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted)"><span>${esc(t.taskId)} ${prioBadge(t.priority)}</span>${statusBadge(t.status)}</div>
     <h2 style="font-size:19px;margin:8px 0 4px;word-break:break-word">${esc(t.title)}</h2>
-    ${t.detail ? `<div class="detail">${esc(t.detail)}</div>` : ''}
+    ${t.detail ? `<div class="detail">${linkify(t.detail)}</div>` : ''}
     <dl class="kv">
       <dt>ผู้สั่ง</dt><dd>${esc(t.assignerName)}</dd>
       <dt>ผู้รับ</dt><dd>${esc(t.assigneeName)}</dd>
@@ -473,7 +482,7 @@ async function pageTask(p) {
 
   // ฝั่งผู้รับงาน
   if (t.canWork) {
-    if (t.status === 'REVISE' && t.lastNote) h += `<div class="banner warn"><b>ผู้สั่งขอให้แก้ไข:</b><br>${esc(t.lastNote)}</div>`;
+    if (t.status === 'REVISE' && t.lastNote) h += `<div class="banner warn"><b>ผู้สั่งขอให้แก้ไข:</b><br>${linkify(t.lastNote)}</div>`;
     h += `<div class="section-title">อัปเดตงานของฉัน</div><div class="card">`;
     if (t.status === 'NEW') h += `<button class="btn blue" style="margin-top:0" onclick="doAck()">👍 รับทราบงานนี้</button><div class="note-hint" style="text-align:center;margin:6px 0 4px">หรืออัปเดตความคืบหน้าได้ทันที</div>`;
     h += `<label class="f" ${t.status === 'NEW' ? '' : 'style="margin-top:0"'}>ความคืบหน้า</label>
@@ -491,7 +500,7 @@ async function pageTask(p) {
   if (t.canManage) {
     if (t.status === 'SUBMITTED') {
       h += `<div class="section-title">ตรวจรับงาน</div><div class="card" id="reviewBox">
-        ${t.lastNote ? `<div class="detail" style="margin:0 0 6px"><b>ผู้รับแจ้งว่า:</b> ${esc(t.lastNote)}</div>` : ''}
+        ${t.lastNote ? `<div class="detail" style="margin:0 0 6px"><b>ผู้รับแจ้งว่า:</b> ${linkify(t.lastNote)}</div>` : ''}
         <label class="f">ความเห็นถึงผู้รับ <span style="font-weight:400">(จำเป็นเมื่อขอให้แก้ไข)</span></label>
         <textarea id="reviewNote" placeholder="เช่น เรียบร้อยดี ขอบคุณครับ / ช่วยแก้ตัวเลขในหน้า 2"></textarea>
         <label class="f">กำหนดส่งใหม่ (ถ้าขอแก้ไข)</label>
@@ -522,7 +531,7 @@ async function pageTask(p) {
     updates.map(u => `<div class="ev" style="--dc:${TYPE_COLOR[u.type] || '#94A3B8'}">
       <div class="h"><b>${esc(u.userName)}</b> · ${esc(u.typeTh)}${u.type === 'PROGRESS' || u.type === 'SUBMIT' ? ' ' + u.progress + '%' : ''}</div>
       <div class="tm">${esc(fmt(u.createdAt))} · ${esc(ago(u.createdAt))}</div>
-      ${u.note && u.type !== 'CREATE' ? `<div class="n">${esc(u.note)}</div>` : ''}
+      ${u.note && u.type !== 'CREATE' ? `<div class="n">${linkify(u.note)}</div>` : ''}
       ${photoGallery(u.imageUrls || (u.imageUrl ? [u.imageUrl] : []))}
     </div>`).join('') + `</div>`;
   return h;
@@ -644,6 +653,13 @@ function applyRole() {
   $('#meAvatar').innerHTML = S.me ? avatar(S.me.name, S.me.pictureUrl) : '';
 }
 $('#tabbar').addEventListener('click', e => { const b = e.target.closest('button[data-go]'); if (b) go(b.dataset.go, b.dataset.go === S.page ? S.params : {}); });
+// ลิงก์ในข้อความ: ในแอป LINE เปิดด้วยเบราว์เซอร์ของ LINE
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.lnk');
+  if (!a || IS_MOCK || typeof liff === 'undefined' || !liff.isInClient || !liff.isInClient()) return;
+  e.preventDefault();
+  try { liff.openWindow({ url: a.href, external: false }); } catch (err) { location.href = a.href; }
+});
 $('#backBtn').onclick = () => { if (history.length > 1 && history.state) history.back(); else go('home'); };
 
 function openGuide(sec, replace) {
