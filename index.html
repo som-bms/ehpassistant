@@ -108,7 +108,9 @@
   /* ปฏิทินไทย + เวลา 24 ชม. */
   .dt { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
   .dt-show { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 10px 12px; text-align: left; cursor: pointer; }
-  .dt-show .ic { font-size: 20px; }
+  .dt-ic { flex: none; width: 40px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); text-align: center; background: #fff; line-height: 1; }
+  .dt-ic i { display: block; font-style: normal; background: #DC2626; color: #fff; font-size: 10.5px; font-weight: 600; padding: 3px 0 2px; }
+  .dt-ic b { display: block; font-size: 17px; font-weight: 700; padding: 3px 0 4px; font-variant-numeric: tabular-nums; }
   .dt-show b { display: block; font-size: 15px; font-weight: 600; }
   .dt-show small { color: var(--muted); font-size: 12.5px; }
   .dt-show .chev { margin-left: auto; color: var(--muted); transition: transform .2s; }
@@ -256,7 +258,7 @@ function dtField(id, date, opts) {
   for (let h = 0; h < 24; h++) hrs += `<option value="${h}">${pad2(h)}</option>`;
   return `<div class="dt" data-dt="${id}" data-min="${opts.noPast ? 1 : ''}">
     <input type="hidden" id="${id}" name="${id}" value="${toLocalInput(d)}">
-    <button type="button" class="dt-show" aria-expanded="false"><span class="ic">📅</span><span><b class="dt-date"></b><small class="dt-sub"></small></span><span class="chev">▾</span></button>
+    <button type="button" class="dt-show" aria-expanded="false"><span class="dt-ic" aria-hidden="true"><i></i><b></b></span><span><b class="dt-date"></b><small class="dt-sub"></small></span><span class="chev">▾</span></button>
     <div class="dt-panel" hidden></div>
     <div class="dt-time"><span class="l">เวลา (24 ชม.)</span><select class="dt-h" aria-label="ชั่วโมง">${hrs}</select><b>:</b><select class="dt-m" aria-label="นาที">${mins}</select><span>น.</span></div>
   </div>`;
@@ -272,6 +274,8 @@ function dtSet(id, d) {
 function dtPaint(wrap) {
   const id = wrap.dataset.dt, d = dtGet(id);
   $('.dt-date', wrap).textContent = thDateLabel(d);
+  $('.dt-ic i', wrap).textContent = TH_MONTHS[d.getMonth()];
+  $('.dt-ic b', wrap).textContent = d.getDate();
   $('.dt-sub', wrap).textContent = `เวลา ${pad2(d.getHours())}:${pad2(d.getMinutes())} น. · ${relDay(d)}`;
   const mSel = $('.dt-m', wrap);
   if (!mSel.querySelector(`option[value="${d.getMinutes()}"]`)) mSel.insertAdjacentHTML('beforeend', `<option value="${d.getMinutes()}">${pad2(d.getMinutes())}</option>`);
