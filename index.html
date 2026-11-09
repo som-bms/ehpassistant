@@ -104,6 +104,27 @@
   details.manage summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; }
   details.manage summary::after { content: '▾'; color: var(--muted); }
   details.manage[open] summary::after { content: '▴'; }
+  .wl { padding: 12px 12px 10px; }
+  .wl-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #EEF2F6; border-radius: 10px; padding: 3px; margin-bottom: 10px; }
+  .wl-tabs button { border: 0; background: none; border-radius: 8px; padding: 6px 4px; font-size: 13.5px; cursor: pointer; color: var(--muted); line-height: 1.3; }
+  .wl-tabs button small { display: block; font-size: 11px; }
+  .wl-tabs button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.1); }
+  .wl-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; text-align: center; }
+  .wl-stat { background: #F8FAFC; border-radius: 10px; padding: 7px 2px; }
+  .wl-stat b { display: block; font-size: 20px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .wl-stat span { font-size: 11.5px; color: var(--muted); }
+  .wl-row { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center; width: 100%; border: 0; background: none; padding: 7px 2px; border-top: 1px solid var(--line); text-align: left; cursor: pointer; }
+  .wl-mid { min-width: 0; display: grid; gap: 4px; }
+  .wl-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wl-name small { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .wl-bar { display: flex; height: 8px; border-radius: 4px; background: #EEF2F6; overflow: hidden; }
+  .wl-bar i { display: block; height: 100%; }
+  .wl-num { text-align: right; font-variant-numeric: tabular-nums; min-width: 44px; line-height: 1.2; }
+  .wl-num b { font-size: 16px; display: block; }
+  .wl-num em { font-style: normal; font-size: 11px; color: #DC2626; font-weight: 600; }
+  .wl-num .idle { font-size: 12.5px; color: #16A34A; }
+  .wl-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 2px; }
+  .wl-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
   a.lnk { color: var(--accent); text-decoration: underline; word-break: break-all; }
   /* ปฏิทินไทย + เวลา 24 ชม. */
   .dt { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
@@ -414,6 +435,7 @@ async function render() {
 /* ---------- หน้าหลัก ---------- */
 async function pageHome() {
   const [me, mine] = await Promise.all([api('me'), api('listTasks', { scope: 'mine' })]);
+  S.wl = me.user.canAssign ? await api('workload').catch(() => null) : null;
   S.me = me.user; S.stats = me.stats; applyRole();
   const s = me.stats, u = me.user;
   const upcoming = mine.filter(t => ACTIVE.includes(t.status) && t.status !== 'SUBMITTED').slice(0, 3);
@@ -434,12 +456,55 @@ async function pageHome() {
       ${tile(s.assigned.active, 'ยังไม่ปิดทั้งหมด', '', "go('assigned',{f:'active'})")}
     </div>`;
   }
+  if (u.canAssign && S.wl) h += `<div class="section-title">ภาระงานของทีม</div><div class="card wl" id="wl">${workloadHtml()}</div>`;
   if (u.isAdmin) {
     h += `<button class="btn sec" style="margin-top:12px" onclick="go('assigned',{all:'1',f:'active'})">🏢 ดูงานทั้งองค์กร (ผู้ดูแล)</button>`;
   }
   h += `<div class="section-title">ใกล้ครบกำหนด</div>`;
   h += upcoming.length ? upcoming.map(t => taskCard(t, 'mine')).join('') : `<div class="card empty" style="padding:22px">🎉 ไม่มีงานค้าง</div>`;
   h += `<button class="card hello" style="width:100%;border:0;text-align:left;cursor:pointer;margin-top:18px" onclick="openGuide()"><span style="font-size:26px">📖</span><div style="flex:1"><b style="font-size:15.5px">คู่มือการใช้งาน</b><span style="font-size:12.5px;color:var(--muted)">วิธีรับงาน สั่งงาน และสั่งงานในไลน์กลุ่ม</span></div><span style="color:var(--muted)">›</span></button>`;
+  return h;
+}
+/* ---------- แดชบอร์ดภาระงาน ---------- */
+const WL_STATUS = ['NEW', 'ACK', 'IN_PROGRESS', 'REVISE', 'SUBMITTED'];
+function setWlMode(m) { S.wlMode = m; try { localStorage.setItem('wlMode', m); } catch (e) { } $('#wl').innerHTML = workloadHtml(); }
+function workloadHtml() {
+  const d = S.wl;
+  if (!S.wlMode) { try { S.wlMode = localStorage.getItem('wlMode') || 'all'; } catch (e) { S.wlMode = 'all'; } }
+  const mode = S.wlMode, T = d.totals;
+  const ws = new Date(d.weekStart), we = new Date(d.weekEnd);
+  const weekLabel = ws.getMonth() === we.getMonth()
+    ? `${ws.getDate()}–${we.getDate()} ${TH_MONTHS[we.getMonth()]}`
+    : `${ws.getDate()} ${TH_MONTHS[ws.getMonth()]} – ${we.getDate()} ${TH_MONTHS[we.getMonth()]}`;
+  const stat = (n, l, color) => `<div class="wl-stat"><b style="${color && n ? 'color:' + color : ''}">${n}</b><span>${l}</span></div>`;
+  let h = `<div class="wl-tabs" role="tablist">
+    <button role="tab" class="${mode === 'all' ? 'on' : ''}" onclick="setWlMode('all')">งานค้างทั้งหมด</button>
+    <button role="tab" class="${mode === 'week' ? 'on' : ''}" onclick="setWlMode('week')">สัปดาห์นี้ <small>${weekLabel}</small></button></div>`;
+  h += mode === 'all'
+    ? `<div class="wl-stats">${stat(T.active, 'งานค้าง')}${stat(T.submitted, 'รอตรวจรับ', STATUS_COLOR.SUBMITTED)}${stat(T.overdue, 'เกินกำหนด', '#DC2626')}${stat(T.idle, 'คนว่าง', '#16A34A')}</div>`
+    : `<div class="wl-stats">${stat(T.weekTotal, 'ครบกำหนด')}${stat(T.weekDone, 'เสร็จแล้ว', '#16A34A')}${stat(T.weekOpen, 'ยังไม่เสร็จ', '#D97706')}${stat(T.weekOverdue, 'เกินกำหนด', '#DC2626')}</div>`;
+  const val = p => mode === 'all' ? p.active : p.week.total;
+  const max = Math.max(1, ...d.people.map(val));
+  h += d.people.map(p => {
+    const v = val(p);
+    let segs, right;
+    if (mode === 'all') {
+      segs = WL_STATUS.map(s => p.byStatus[s] ? `<i style="width:${p.byStatus[s] / max * 100}%;background:${STATUS_COLOR[s]}" title="${STATUS_TH[s]} ${p.byStatus[s]}"></i>` : '').join('');
+      right = v ? `<b>${v}</b>${p.overdue ? `<em>เกิน ${p.overdue}</em>` : ''}` : '<span class="idle">ว่าง</span>';
+    } else {
+      const ok = p.week.open - p.week.overdue;
+      segs = [[p.week.done, '#16A34A', 'เสร็จแล้ว'], [ok, '#F59E0B', 'ยังไม่เสร็จ'], [p.week.overdue, '#DC2626', 'เกินกำหนด']]
+        .map(([n, c, l]) => n ? `<i style="width:${n / max * 100}%;background:${c}" title="${l} ${n}"></i>` : '').join('');
+      right = v ? `<b>${p.week.done}/${v}</b>${p.week.overdue ? `<em>เกิน ${p.week.overdue}</em>` : ''}` : '<span class="idle">—</span>';
+    }
+    const nav = S.me && S.me.isAdmin ? `{all:'1',person:'${esc(p.userId)}',f:'active'}` : `{person:'${esc(p.userId)}',f:'active'}`;
+    return `<button class="wl-row" onclick="go('assigned',${nav})">${avatar(p.name, p.pictureUrl, 32)}
+      <span class="wl-mid"><span class="wl-name">${esc(p.name)}${p.department ? ` <small>${esc(p.department)}</small>` : ''}</span><span class="wl-bar">${segs}</span></span>
+      <span class="wl-num">${right}</span></button>`;
+  }).join('');
+  h += mode === 'all'
+    ? `<div class="wl-legend">${WL_STATUS.map(s => `<span><i style="background:${STATUS_COLOR[s]}"></i>${STATUS_TH[s]}</span>`).join('')}</div>`
+    : `<div class="wl-legend"><span><i style="background:#16A34A"></i>เสร็จแล้ว</span><span><i style="background:#F59E0B"></i>ยังไม่เสร็จ</span><span><i style="background:#DC2626"></i>เกินกำหนด</span><span>ตัวเลข = เสร็จ/ทั้งหมด ที่ครบกำหนดในสัปดาห์ (รวมงานค้างที่เกินกำหนดมาก่อน)</span></div>`;
   return h;
 }
 function tile(n, label, cls, onclick) { return `<button class="tile ${cls}" onclick="${onclick}"><div class="n">${n}</div><div class="l">${esc(label)}</div></button>`; }
@@ -849,6 +914,20 @@ const MOCK = (() => {
   };
   const h = {
     me: () => ({ user: me, stats: stats() }),
+    workload: () => {
+      const n = new Date(), dow = (n.getDay() + 6) % 7;
+      const ws = new Date(n.getFullYear(), n.getMonth(), n.getDate() - dow), we = new Date(ws.getTime() + 7 * D);
+      const people = users.map(u => ({ userId: u.userId, name: u.name, pictureUrl: '', department: u.department, byStatus: { NEW: 0, ACK: 0, IN_PROGRESS: 0, REVISE: 0, SUBMITTED: 0 }, active: 0, overdue: 0, week: { total: 0, done: 0, open: 0, overdue: 0 } }));
+      tasks.forEach(t => {
+        const p = people.find(x => x.userId === t.assigneeId); if (!p) return;
+        const late = dto(t).overdue, due = new Date(t.dueDate);
+        if (ACTIVE.includes(t.status)) { p.active++; p.byStatus[t.status]++; if (late) p.overdue++; }
+        if (t.status !== 'CANCELLED' && ((due >= ws && due < we) || (due < ws && ACTIVE.includes(t.status)))) { p.week.total++; if (t.status === 'DONE') p.week.done++; else { p.week.open++; if (late) p.week.overdue++; } }
+      });
+      people.sort((a, b) => b.active - a.active || b.week.total - a.week.total);
+      const totals = people.reduce((s, p) => { s.active += p.active; s.overdue += p.overdue; s.submitted += p.byStatus.SUBMITTED; s.weekTotal += p.week.total; s.weekDone += p.week.done; s.weekOpen += p.week.open; s.weekOverdue += p.week.overdue; if (!p.active) s.idle++; return s; }, { active: 0, overdue: 0, submitted: 0, idle: 0, weekTotal: 0, weekDone: 0, weekOpen: 0, weekOverdue: 0 });
+      return { weekStart: ws.toISOString(), weekEnd: new Date(we.getTime() - 1).toISOString(), people, totals };
+    },
     users: () => users,
     updateProfile: p => { me.nickname = p.nickname; me.department = p.department; me.name = p.nickname || me.displayName; return { user: me }; },
     listTasks: p => sort(tasks.filter(t => p.scope === 'all' || (p.scope === 'assigned' ? t.assignerId === me.userId : t.assigneeId === me.userId))).map(dto),
