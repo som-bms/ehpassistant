@@ -55,7 +55,7 @@
   .empty { text-align: center; color: var(--muted); padding: 36px 10px; }
   .empty .big { font-size: 40px; }
   label.f { display: block; font-size: 13px; color: var(--muted); font-weight: 600; margin: 12px 0 5px; }
-  input[type=text], input[type=search], input[type=datetime-local], textarea, select {
+  input[type=text], input[type=search], textarea, select {
     width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; outline: none; }
   input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
   textarea { resize: vertical; min-height: 80px; }
@@ -105,6 +105,29 @@
   details.manage summary::after { content: '▾'; color: var(--muted); }
   details.manage[open] summary::after { content: '▴'; }
   a.lnk { color: var(--accent); text-decoration: underline; word-break: break-all; }
+  /* ปฏิทินไทย + เวลา 24 ชม. */
+  .dt { border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; }
+  .dt-show { width: 100%; display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 10px 12px; text-align: left; cursor: pointer; }
+  .dt-show .ic { font-size: 20px; }
+  .dt-show b { display: block; font-size: 15px; font-weight: 600; }
+  .dt-show small { color: var(--muted); font-size: 12.5px; }
+  .dt-show .chev { margin-left: auto; color: var(--muted); transition: transform .2s; }
+  .dt.open .dt-show .chev { transform: rotate(180deg); }
+  .dt-panel { border-top: 1px solid var(--line); padding: 10px 10px 12px; }
+  .dt-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .dt-nav b { font-size: 15px; }
+  .dt-nav button { border: 1px solid var(--line); background: #fff; border-radius: 9px; width: 36px; height: 32px; font-size: 18px; cursor: pointer; }
+  .dt-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
+  .dt-grid .wd { font-size: 12px; color: var(--muted); padding: 2px 0 4px; font-weight: 600; }
+  .dt-grid .wd.sun { color: #DC2626; }
+  .dt-grid button { border: 0; background: none; border-radius: 9px; height: 36px; font-size: 14.5px; cursor: pointer; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .dt-grid button.sun { color: #DC2626; }
+  .dt-grid button.today { box-shadow: inset 0 0 0 1.5px var(--brand); font-weight: 600; }
+  .dt-grid button.sel { background: var(--brand); color: #fff; font-weight: 700; }
+  .dt-grid button:disabled { color: #CBD5E1; cursor: default; }
+  .dt-time { display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); padding: 8px 12px; font-size: 14px; }
+  .dt-time span.l { color: var(--muted); margin-right: auto; }
+  .dt-time select { width: auto; padding: 6px 8px; font-variant-numeric: tabular-nums; font-size: 15px; }
   .note-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .banner { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 12px; }
   .banner.warn { background: #FEF2F2; color: #991B1B; } .banner.info { background: #EFF6FF; color: #1E40AF; } .banner.mock { background: #FEF9C3; color: #854D0E; }
@@ -216,6 +239,96 @@ function toast(msg, isErr) {
 }
 function busy(on) { $('#busy').classList.toggle('show', !!on); }
 function skeleton(n) { return '<div class="skel"></div>'.repeat(n || 3); }
+/* ---------- ปฏิทินไทย + เวลา 24 ชั่วโมง ---------- */
+const TH_MONTH_FULL = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+const TH_WD_FULL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+const TH_WD_MINI = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+const pad2 = n => String(n).padStart(2, '0');
+function thDateLabel(d) { return `วัน${TH_WD_FULL[d.getDay()]}ที่ ${d.getDate()} ${TH_MONTH_FULL[d.getMonth()]} ${d.getFullYear() + 543}`; }
+
+/** ช่องเลือกวันเวลา: ค่าจริงอยู่ใน hidden input (รูปแบบ YYYY-MM-DDTHH:mm) ชื่อ/ไอดี = id */
+function dtField(id, date, opts) {
+  opts = opts || {};
+  const d = date || new Date();
+  let mins = '';
+  for (let m = 0; m < 60; m += 5) mins += `<option value="${m}">${pad2(m)}</option>`;
+  let hrs = '';
+  for (let h = 0; h < 24; h++) hrs += `<option value="${h}">${pad2(h)}</option>`;
+  return `<div class="dt" data-dt="${id}" data-min="${opts.noPast ? 1 : ''}">
+    <input type="hidden" id="${id}" name="${id}" value="${toLocalInput(d)}">
+    <button type="button" class="dt-show" aria-expanded="false"><span class="ic">📅</span><span><b class="dt-date"></b><small class="dt-sub"></small></span><span class="chev">▾</span></button>
+    <div class="dt-panel" hidden></div>
+    <div class="dt-time"><span class="l">เวลา (24 ชม.)</span><select class="dt-h" aria-label="ชั่วโมง">${hrs}</select><b>:</b><select class="dt-m" aria-label="นาที">${mins}</select><span>น.</span></div>
+  </div>`;
+}
+function dtGet(id) { const v = $('#' + id) && $('#' + id).value; return v ? new Date(v) : null; }
+function dtSet(id, d) {
+  const wrap = document.querySelector(`.dt[data-dt="${id}"]`);
+  if (!wrap || !d || isNaN(d)) return;
+  $('#' + id).value = toLocalInput(d);
+  wrap._view = new Date(d.getFullYear(), d.getMonth(), 1);
+  dtPaint(wrap);
+}
+function dtPaint(wrap) {
+  const id = wrap.dataset.dt, d = dtGet(id);
+  $('.dt-date', wrap).textContent = thDateLabel(d);
+  $('.dt-sub', wrap).textContent = `เวลา ${pad2(d.getHours())}:${pad2(d.getMinutes())} น. · ${relDay(d)}`;
+  const mSel = $('.dt-m', wrap);
+  if (!mSel.querySelector(`option[value="${d.getMinutes()}"]`)) mSel.insertAdjacentHTML('beforeend', `<option value="${d.getMinutes()}">${pad2(d.getMinutes())}</option>`);
+  $('.dt-h', wrap).value = d.getHours(); mSel.value = d.getMinutes();
+  const panel = $('.dt-panel', wrap);
+  if (panel.hidden) return;
+  const v = wrap._view, y = v.getFullYear(), mo = v.getMonth();
+  const first = new Date(y, mo, 1).getDay(), days = new Date(y, mo + 1, 0).getDate();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  let cells = TH_WD_MINI.map((w, i) => `<div class="wd ${i === 0 ? 'sun' : ''}">${w}</div>`).join('');
+  for (let i = 0; i < first; i++) cells += '<span></span>';
+  for (let n = 1; n <= days; n++) {
+    const cd = new Date(y, mo, n);
+    const cls = [cd.getDay() === 0 ? 'sun' : '', +cd === +today ? 'today' : '',
+      cd.getFullYear() === d.getFullYear() && cd.getMonth() === d.getMonth() && n === d.getDate() ? 'sel' : ''].join(' ');
+    const dis = wrap.dataset.min && cd < today ? 'disabled' : '';
+    cells += `<button type="button" class="${cls}" data-day="${n}" ${dis} aria-label="${thDateLabel(cd)}">${n}</button>`;
+  }
+  panel.innerHTML = `<div class="dt-nav"><button type="button" data-nav="-1" aria-label="เดือนก่อน">‹</button><b>${TH_MONTH_FULL[mo]} ${y + 543}</b><button type="button" data-nav="1" aria-label="เดือนถัดไป">›</button></div><div class="dt-grid">${cells}</div>`;
+}
+/** กำหนดส่งใหม่ตอนขอแก้ไข: กำหนดเดิมถ้ายังไม่ถึง ไม่อย่างนั้นพรุ่งนี้ 17:00 */
+function reviseDefault(iso) {
+  const tmr = new Date(); tmr.setDate(tmr.getDate() + 1); tmr.setHours(17, 0, 0, 0);
+  const old = iso ? new Date(iso) : null;
+  return old && old > tmr ? old : tmr;
+}
+function relDay(d) {
+  const a = new Date(d); a.setHours(0, 0, 0, 0);
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const n = Math.round((a - t) / 86400000);
+  return n === 0 ? 'วันนี้' : n === 1 ? 'พรุ่งนี้' : n === -1 ? 'เมื่อวาน' : n > 0 ? `อีก ${n} วัน` : `${-n} วันที่แล้ว`;
+}
+function initDt(root) {
+  $$('.dt', root).forEach(wrap => {
+    if (wrap._init) return; wrap._init = true;
+    const id = wrap.dataset.dt, d = dtGet(id);
+    wrap._view = new Date(d.getFullYear(), d.getMonth(), 1);
+    const panel = $('.dt-panel', wrap), show = $('.dt-show', wrap);
+    show.onclick = () => {
+      panel.hidden = !panel.hidden; wrap.classList.toggle('open', !panel.hidden);
+      show.setAttribute('aria-expanded', String(!panel.hidden));
+      const cur = dtGet(id); wrap._view = new Date(cur.getFullYear(), cur.getMonth(), 1); dtPaint(wrap);
+    };
+    panel.onclick = e => {
+      const nav = e.target.closest('[data-nav]'), day = e.target.closest('[data-day]');
+      if (nav) { wrap._view = new Date(wrap._view.getFullYear(), wrap._view.getMonth() + Number(nav.dataset.nav), 1); dtPaint(wrap); }
+      if (day && !day.disabled) {
+        const cur = dtGet(id);
+        dtSet(id, new Date(wrap._view.getFullYear(), wrap._view.getMonth(), Number(day.dataset.day), cur.getHours(), cur.getMinutes()));
+        panel.hidden = true; wrap.classList.remove('open'); show.setAttribute('aria-expanded', 'false');
+      }
+    };
+    const time = () => { const cur = dtGet(id); cur.setHours(Number($('.dt-h', wrap).value), Number($('.dt-m', wrap).value)); dtSet(id, cur); };
+    $('.dt-h', wrap).onchange = time; $('.dt-m', wrap).onchange = time;
+    dtPaint(wrap);
+  });
+}
 function toLocalInput(d) {
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -416,7 +529,7 @@ async function pageAssign() {
     <label class="f">ความเร่งด่วน</label>
     <div class="seg" id="prio">${Object.keys(PRIORITY_TH).map(k => `<button type="button" data-v="${k}" class="${k === 'NORMAL' ? 'on' : ''}" style="${k === 'NORMAL' ? 'background:' + PRIORITY_COLOR[k] : ''}">${PRIORITY_TH[k]}</button>`).join('')}</div>
     <label class="f">กำหนดส่ง *</label>
-    <input type="datetime-local" name="due" value="${toLocalInput(d)}" required>
+    ${dtField('due', d, { noPast: true })}
     <div class="quick" id="quickDue">
       <button type="button" data-d="0">วันนี้ 17:00</button><button type="button" data-d="1">พรุ่งนี้ 17:00</button>
       <button type="button" data-d="3">อีก 3 วัน</button><button type="button" data-d="7">อีก 1 สัปดาห์</button>
@@ -425,6 +538,7 @@ async function pageAssign() {
   </form>`;
 }
 pageAssign.after = function () {
+  initDt();
   const form = $('#assignForm'); if (!form) return;
   let prio = 'NORMAL';
   const updatePicked = () => {
@@ -442,7 +556,7 @@ pageAssign.after = function () {
   });
   $$('#quickDue button').forEach(b => b.onclick = () => {
     const d = new Date(); d.setDate(d.getDate() + Number(b.dataset.d)); d.setHours(17, 0, 0, 0);
-    form.due.value = toLocalInput(d);
+    dtSet('due', d);
   });
   form.onsubmit = async e => {
     e.preventDefault();
@@ -504,7 +618,7 @@ async function pageTask(p) {
         <label class="f">ความเห็นถึงผู้รับ <span style="font-weight:400">(จำเป็นเมื่อขอให้แก้ไข)</span></label>
         <textarea id="reviewNote" placeholder="เช่น เรียบร้อยดี ขอบคุณครับ / ช่วยแก้ตัวเลขในหน้า 2"></textarea>
         <label class="f">กำหนดส่งใหม่ (ถ้าขอแก้ไข)</label>
-        <input type="datetime-local" id="reviseDue" value="${t.dueDate ? toLocalInput(new Date(Math.max(new Date(t.dueDate), Date.now() + 86400000))) : ''}">
+        ${dtField('reviseDue', reviseDefault(t.dueDate), { noPast: true })}
         <div class="row2"><button class="btn red" onclick="doRevise()">🔁 ขอให้แก้ไข</button><button class="btn" onclick="doApprove()">✔ ตรวจรับ ปิดงาน</button></div>
       </div>`;
     }
@@ -512,7 +626,7 @@ async function pageTask(p) {
       <label class="f">ชื่องาน</label><input type="text" id="eTitle" value="${esc(t.title)}" maxlength="200">
       <label class="f">รายละเอียด</label><textarea id="eDetail" maxlength="3000">${esc(t.detail)}</textarea>
       <label class="f">ความเร่งด่วน</label><select id="ePrio">${Object.keys(PRIORITY_TH).map(k => `<option value="${k}" ${k === t.priority ? 'selected' : ''}>${PRIORITY_TH[k]}</option>`).join('')}</select>
-      <label class="f">กำหนดส่ง</label><input type="datetime-local" id="eDue" value="${t.dueDate ? toLocalInput(new Date(t.dueDate)) : ''}">
+      <label class="f">กำหนดส่ง</label>${dtField('eDue', t.dueDate ? new Date(t.dueDate) : new Date())}
       <button class="btn blue" onclick="doEdit()">บันทึกการแก้ไข</button>
       ${t.status !== 'SUBMITTED' ? `<button class="btn sec" onclick="doApprove(true)">✔ ปิดงานทันที</button>` : ''}
       <button class="btn ghost-red" onclick="doCancel()">ยกเลิกงานนี้</button>
@@ -537,6 +651,7 @@ async function pageTask(p) {
   return h;
 }
 pageTask.after = function (p) {
+  initDt();
   const r = $('#prog');
   if (r) r.oninput = () => $('#progOut').textContent = r.value + '%';
   $$('input[data-photo]').forEach(inp => inp.onchange = () => pickPhoto(inp));
