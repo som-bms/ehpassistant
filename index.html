@@ -482,7 +482,7 @@ function workloadHtml() {
     <button role="tab" class="${mode === 'week' ? 'on' : ''}" onclick="setWlMode('week')">สัปดาห์นี้ <small>${weekLabel}</small></button></div>`;
   h += mode === 'all'
     ? `<div class="wl-stats">${stat(T.active, 'งานค้าง')}${stat(T.submitted, 'รอตรวจรับ', STATUS_COLOR.SUBMITTED)}${stat(T.overdue, 'เกินกำหนด', '#DC2626')}${stat(T.idle, 'คนว่าง', '#16A34A')}</div>`
-    : `<div class="wl-stats">${stat(T.weekTotal, 'ครบกำหนด')}${stat(T.weekDone, 'เสร็จแล้ว', '#16A34A')}${stat(T.weekOpen, 'ยังไม่เสร็จ', '#D97706')}${stat(T.weekOverdue, 'เกินกำหนด', '#DC2626')}</div>`;
+    : `<div class="wl-stats">${stat(T.weekTotal, 'งานสัปดาห์นี้')}${stat(T.weekDone, 'เสร็จ/ส่งแล้ว', '#16A34A')}${stat(T.weekOpen, 'ยังไม่เสร็จ', '#D97706')}${stat(T.weekOverdue, 'เกินกำหนด', '#DC2626')}</div>`;
   const val = p => mode === 'all' ? p.active : p.week.total;
   const max = Math.max(1, ...d.people.map(val));
   h += d.people.map(p => {
@@ -493,9 +493,9 @@ function workloadHtml() {
       right = v ? `<b>${v}</b>${p.overdue ? `<em>เกิน ${p.overdue}</em>` : ''}` : '<span class="idle">ว่าง</span>';
     } else {
       const ok = p.week.open - p.week.overdue;
-      segs = [[p.week.done, '#16A34A', 'เสร็จแล้ว'], [ok, '#F59E0B', 'ยังไม่เสร็จ'], [p.week.overdue, '#DC2626', 'เกินกำหนด']]
+      segs = [[p.week.done, '#16A34A', 'เสร็จแล้ว'], [p.week.submitted, STATUS_COLOR.SUBMITTED, 'ส่งแล้ว รอตรวจรับ'], [ok, '#F59E0B', 'ยังไม่เสร็จ'], [p.week.overdue, '#DC2626', 'เกินกำหนด']]
         .map(([n, c, l]) => n ? `<i style="width:${n / max * 100}%;background:${c}" title="${l} ${n}"></i>` : '').join('');
-      right = v ? `<b>${p.week.done}/${v}</b>${p.week.overdue ? `<em>เกิน ${p.week.overdue}</em>` : ''}` : '<span class="idle">—</span>';
+      right = v ? `<b>${p.week.done + p.week.submitted}/${v}</b>${p.week.overdue ? `<em>เกิน ${p.week.overdue}</em>` : ''}` : '<span class="idle">—</span>';
     }
     const nav = S.me && S.me.isAdmin ? `{all:'1',person:'${esc(p.userId)}',f:'active'}` : `{person:'${esc(p.userId)}',f:'active'}`;
     return `<button class="wl-row" onclick="go('assigned',${nav})">${avatar(p.name, p.pictureUrl, 32)}
@@ -504,7 +504,7 @@ function workloadHtml() {
   }).join('');
   h += mode === 'all'
     ? `<div class="wl-legend">${WL_STATUS.map(s => `<span><i style="background:${STATUS_COLOR[s]}"></i>${STATUS_TH[s]}</span>`).join('')}</div>`
-    : `<div class="wl-legend"><span><i style="background:#16A34A"></i>เสร็จแล้ว</span><span><i style="background:#F59E0B"></i>ยังไม่เสร็จ</span><span><i style="background:#DC2626"></i>เกินกำหนด</span><span>ตัวเลข = เสร็จ/ทั้งหมด ที่ครบกำหนดในสัปดาห์ (รวมงานค้างที่เกินกำหนดมาก่อน)</span></div>`;
+    : `<div class="wl-legend"><span><i style="background:#16A34A"></i>เสร็จแล้ว</span><span><i style="background:${STATUS_COLOR.SUBMITTED}"></i>ส่งแล้ว รอตรวจรับ</span><span><i style="background:#F59E0B"></i>ยังไม่เสร็จ</span><span><i style="background:#DC2626"></i>เกินกำหนด</span><span>ตัวเลข = เสร็จหรือส่งแล้ว / งานที่ครบกำหนดในสัปดาห์ รวมงานที่เกินกำหนดค้างมาจากสัปดาห์ก่อน</span></div>`;
   return h;
 }
 function tile(n, label, cls, onclick) { return `<button class="tile ${cls}" onclick="${onclick}"><div class="n">${n}</div><div class="l">${esc(label)}</div></button>`; }
@@ -566,6 +566,7 @@ async function listPage(scope, p) {
     h += `<div class="card" style="padding:10px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>ความคืบหน้าเฉลี่ย ${rows.length} งาน</span><b>${avg}%</b></div>${pbar(avg, '#06C755')}</div>`;
   }
   h += `<div style="display:grid;grid-template-columns:${row.length > 1 ? '1fr 1fr' : '1fr'};gap:8px;margin-bottom:12px">${row.join('')}</div>`;
+  if (person && scope === 'assigned') h += `<div class="banner info">แสดงเฉพาะงานที่คุณสั่งให้คนนี้ — ตัวเลขในแดชบอร์ดหน้าหลักรวมงานจากผู้สั่งทุกคน</div>`;
   h += rows.length ? rows.map(t => taskCard(t, scope)).join('')
     : `<div class="empty"><div class="big">${f === 'active' ? '🎉' : '🗂️'}</div>${f === 'active' ? 'ไม่มีงานค้าง' : 'ไม่มีงานในหมวดนี้'}</div>`;
   return h;
@@ -900,7 +901,7 @@ const MOCK = (() => {
     { taskId: 'T0003', userId: 'U4', type: 'SUBMIT', progress: 100, note: 'แนบไฟล์ไว้ในไดรฟ์ทีมแล้วครับ', createdAt: iso(now - H) },
   ];
   const TYPE_TH = { CREATE: 'สั่งงาน', ACK: 'รับทราบงาน', PROGRESS: 'อัปเดตความคืบหน้า', SUBMIT: 'ส่งงาน', APPROVE: 'ตรวจรับ/ปิดงาน', REVISE: 'ขอให้แก้ไข', CANCEL: 'ยกเลิกงาน', EDIT: 'แก้ไขรายละเอียด', COMMENT: 'ความเห็น' };
-  const dto = t => Object.assign({}, t, { assignerName: nm(t.assignerId), assigneeName: nm(t.assigneeId), overdue: ACTIVE.includes(t.status) && new Date(t.dueDate) < new Date() });
+  const dto = t => Object.assign({}, t, { assignerName: nm(t.assignerId), assigneeName: nm(t.assigneeId), overdue: ACTIVE.includes(t.status) && t.status !== 'SUBMITTED' && new Date(t.dueDate) < new Date() });
   const find = id => { const t = tasks.find(x => x.taskId === id); if (!t) throw new Error('ไม่พบงาน'); return t; };
   const log = (t, type, note, imgs) => updates.push({ taskId: t.taskId, userId: me.userId, type, progress: t.progress, note: note || '', imageUrls: [].concat(imgs || []), createdAt: new Date().toISOString() });
   const touch = (t, ch) => Object.assign(t, ch, { updatedAt: new Date().toISOString() });
@@ -917,15 +918,19 @@ const MOCK = (() => {
     workload: () => {
       const n = new Date(), dow = (n.getDay() + 6) % 7;
       const ws = new Date(n.getFullYear(), n.getMonth(), n.getDate() - dow), we = new Date(ws.getTime() + 7 * D);
-      const people = users.map(u => ({ userId: u.userId, name: u.name, pictureUrl: '', department: u.department, byStatus: { NEW: 0, ACK: 0, IN_PROGRESS: 0, REVISE: 0, SUBMITTED: 0 }, active: 0, overdue: 0, week: { total: 0, done: 0, open: 0, overdue: 0 } }));
+      const people = users.map(u => ({ userId: u.userId, name: u.name, pictureUrl: '', department: u.department, byStatus: { NEW: 0, ACK: 0, IN_PROGRESS: 0, REVISE: 0, SUBMITTED: 0 }, active: 0, overdue: 0, everAssigned: false, week: { total: 0, done: 0, submitted: 0, open: 0, overdue: 0 } }));
       tasks.forEach(t => {
         const p = people.find(x => x.userId === t.assigneeId); if (!p) return;
+        p.everAssigned = true;
         const late = dto(t).overdue, due = new Date(t.dueDate);
         if (ACTIVE.includes(t.status)) { p.active++; p.byStatus[t.status]++; if (late) p.overdue++; }
-        if (t.status !== 'CANCELLED' && ((due >= ws && due < we) || (due < ws && ACTIVE.includes(t.status)))) { p.week.total++; if (t.status === 'DONE') p.week.done++; else { p.week.open++; if (late) p.week.overdue++; } }
+        if (t.status !== 'CANCELLED' && ((due >= ws && due < we) || (due < ws && late))) {
+          p.week.total++;
+          if (t.status === 'DONE') p.week.done++; else if (t.status === 'SUBMITTED') p.week.submitted++; else { p.week.open++; if (late) p.week.overdue++; }
+        }
       });
       people.sort((a, b) => b.active - a.active || b.week.total - a.week.total);
-      const totals = people.reduce((s, p) => { s.active += p.active; s.overdue += p.overdue; s.submitted += p.byStatus.SUBMITTED; s.weekTotal += p.week.total; s.weekDone += p.week.done; s.weekOpen += p.week.open; s.weekOverdue += p.week.overdue; if (!p.active) s.idle++; return s; }, { active: 0, overdue: 0, submitted: 0, idle: 0, weekTotal: 0, weekDone: 0, weekOpen: 0, weekOverdue: 0 });
+      const totals = people.reduce((s, p) => { s.active += p.active; s.overdue += p.overdue; s.submitted += p.byStatus.SUBMITTED; s.weekTotal += p.week.total; s.weekDone += p.week.done + p.week.submitted; s.weekOpen += p.week.open; s.weekOverdue += p.week.overdue; if (!p.active && p.everAssigned) s.idle++; return s; }, { active: 0, overdue: 0, submitted: 0, idle: 0, weekTotal: 0, weekDone: 0, weekOpen: 0, weekOverdue: 0 });
       return { weekStart: ws.toISOString(), weekEnd: new Date(we.getTime() - 1).toISOString(), people, totals };
     },
     users: () => users,
